@@ -8,6 +8,10 @@ import datetime
 import re
 import sys
 
+headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.102 Safari/537.36'
+}
+
 
 class Yopmail(object):
     def __init__(self, userid):
@@ -20,11 +24,11 @@ class Yopmail(object):
         if not self.localtime is None:
             # after first time we use it, we start to update it everytime
             self.add_localtime()
-        rq = self.ses.get(url, params=params, cookies=self.jar)
-        # print r.status_code
+        r = self.ses.get(url, params=params, cookies=self.jar, headers=headers)
+        # print(f"url: {url}, params: {params}\nstatus_code: {r.status_code}")
         # for cookie in r.cookies:
-        #     print cookie
-        return rq
+        #     print(f"cookie: {cookie}")
+        return r
 
     def r1(self):
         self.request('http://www.yopmail.com')
@@ -35,11 +39,11 @@ class Yopmail(object):
         #   <input type="hidden" name="yp" id="yp" value="OAwt2BGN5AGD4AQp2ZmDmZt" />
         input_el = bs.find('input', {'name':'yp','id':'yp'})
         self.yp = input_el['value']
-        # print 'yp is:', self.yp
+        # print('yp is:', self.yp)
 
     def r2(self):
         self.extract_yp(
-            self.request('http://www.yopmail.com/es/'))
+            self.request('http://www.yopmail.com/en/'))
 
     def add_localtime(self):
         now = datetime.datetime.now().time()
@@ -52,10 +56,10 @@ class Yopmail(object):
         self.add_localtime()
         #yp = self.jar.get("yp", domain="yopmail.com")
         data = {'yp':self.yp, 'login': self.username}
-        rq = self.ses.post('http://www.yopmail.com/es/', data, cookies=self.jar)
-        # print rq.status_code
+        rq = self.ses.post('http://www.yopmail.com/en/', data, cookies=self.jar, headers=headers)
+        # print(rq.status_code)
         # for cookie in rq.cookies:
-        #     print cookie
+        #     print(cookie)
 
     YJ_RE = re.compile("value\+\'\&yj\=([0-9a-zA-Z]*)\&v\=\'", re.MULTILINE)
     def extract_yj(self, req):
@@ -66,16 +70,17 @@ class Yopmail(object):
 
     def r7(self):
         self.extract_yj(
-            self.request("http://www.yopmail.com/style/2.6/webmail.js"))
+            self.request("http://www.yopmail.com/style/3.1/webmail.js"))
 
     def extract_inbox(self, req):
         """<div  class=\"m\" onclick=\"g(6,0);\" id=\"m6\">
                 <div   class=\"um\"><a class=\"lm\" href=\"mail.php?b=pelado&id=me_ZGpjZGVkZGpmZmZ2ZQNjAmZ2AwtjBN==\">
                 <span class=\"lmfd\">
                 <span class=\"lmh\">14:33</span>"""
+        # print(f"req.text: {req.text}")
         bs = BeautifulSoup(req.text, 'html.parser')
         results = {}
-        for idx in xrange(10):
+        for idx in range(10):
             div_mX = bs.find('div', {'class': 'm', 'id': 'm%d'%idx})
             if div_mX is None:
                 continue
@@ -84,6 +89,7 @@ class Yopmail(object):
             href = a['href'].rsplit('&id=',1)[1]
             results[idx] = href
 
+        # print(f"in extract_inbox, results: {results}")
         self.mailids=results
 
     def r8(self, mail_idx=None, page=1):
@@ -101,12 +107,12 @@ class Yopmail(object):
             'yf':'005',
             'yp':self.yp,
             'yj':self.yj,
-            'v':"2.6",
+            'v':"3.1",
             'r_c':'', # ""
             'id':"", # idaff / sometimes "none" / nextmailid='last' / mailid = id('m%d'%mail_nr)
         }
         self.extract_inbox(
-            self.request("http://www.yopmail.com/es/inbox.php", params=params))
+            self.request("http://www.yopmail.com/en/inbox.php", params=params))
 
     def fetch(self, mail_idx):
         if mail_idx is None:
@@ -115,7 +121,7 @@ class Yopmail(object):
             mailid = self.mailids[mail_idx]
         params = {'b':self.username,
                   'id':mailid}  # mailid 'me_ZGpjZGV1ZwRkZwD0ZQNjAmx0AmpkAj=='
-        return self.request('http://www.yopmail.com/es/mail.php', params=params)
+        return self.request('http://www.yopmail.com/en/m.php', params=params)
 
     def __iter__(self):
         return iter(self.mailids.keys())
@@ -141,27 +147,23 @@ def main(username):
     em = Yopmail(username)
     em.login()
     for _id in em:
-        print '--------------------------------------'
+        print(f"reading mail id#{_id}")
         resp = em.fetch(_id)
-        with open(username+'_'+str(_id)+".html", "wb") as f:
+        with open(username+'_'+str(_id)+".html", "w", encoding="utf8") as f:
             try:
                 f.write(resp.text)
-                print repr(resp.text)[:30],'..'
-            except UnicodeEncodeError, e:
-                try:
-                    f.write(resp.text.encode('utf-8'))
-                except Exception, e2:
-                    f.write("error found:")
-                    f.write(repr(e2))
-                    f.write("\r\n")
-                    f.write(repr(resp.text))
-        print
+                print(f"mail id#{_id} saved!!!")
+            except UnicodeEncodeError as e:
+                print(f"UnicodeEncodeError occured, mail id#{_id} not saved!")
+        print()
         time.sleep(1)
+
 
 if __name__=="__main__":
     try:
         main(sys.argv[1])
     except:
-        print 'Usage: python yopmail.py email_user'
-        print
+        print("Usage: python yopmail.py email_user")
+        print("where email_user is the name of email without the '@yopmail.com'")
+        print()
         raise
