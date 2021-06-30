@@ -142,7 +142,6 @@ class TestSomething(unittest.TestCase):
         self.assertIsNotNone(Yopmail.YJ_RE.match(sample))
         self.assertEqual(Yopmail.YJ_RE.match(sample).groups()[0], value)
 
-
 def main(username):
     em = Yopmail(username)
     em.login()
